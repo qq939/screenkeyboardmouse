@@ -4,6 +4,7 @@
 截图工具模块
 提供通过API获取屏幕截图的功能
 """
+import re
 import cv2
 import mss
 from PIL import Image
@@ -54,9 +55,9 @@ class ScreenKeyboardMouse:
             
             # 在截图上绘制鼠标指针（简化版箭头）
             cv2.circle(frame, (mouse_x, mouse_y), 5, (0, 0, 255), -1)  # 鼠标位置中心点
-            
-                    
+
             return frame
+
             
         except Exception as e:
             print(f"截图失败: {e}")
@@ -172,17 +173,19 @@ class ScreenKeyboardMouse:
         pyautogui.press(key)
 
 import cv2
-import openai
+import pyttsx3
+import base64
+from cv2 import imencode
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.messages import SystemMessage
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pyaudio import PyAudio, paInt16
 from speech_recognition import Microphone, Recognizer, UnknownValueError
+
 
 load_dotenv()
 
@@ -207,17 +210,47 @@ class Assistant:
         if response:
             self._tts(response)
 
-    def _tts(self, response):
-        player = PyAudio().open(format=paInt16, channels=1, rate=24000, output=True)
+    import pyttsx3
 
-        with openai.audio.speech.with_streaming_response.create(
-            model="tts-1",
-            voice="alloy",
-            response_format="pcm",
-            input=response,
-        ) as stream:
-            for chunk in stream.iter_bytes(chunk_size=1024):
-                player.write(chunk)
+    def text_to_speech(self, text, voice_id="com.apple.speech.synthesis.voice.Trinoids", rate=200, volume=1.0):
+        """使用 pyttsx3 实现本地文本转语音"""
+        # 初始化引擎
+        engine = pyttsx3.init()
+        
+        # 设置语音（可选）
+        if voice_id:
+            engine.setProperty('voice', voice_id)
+        
+        # 设置语速（单词/分钟）
+        engine.setProperty('rate', rate)
+        
+        # 设置音量（0.0 到 1.0）
+        engine.setProperty('volume', volume)
+        
+        # 生成并播放语音（同步模式）
+        engine.say(text)
+        engine.runAndWait()
+        
+        # 可选：保存为音频文件
+        # engine.save_to_file(text, 'output.wav')
+        # engine.runAndWait()
+
+
+
+
+
+    def _tts(self, response):
+        # player = PyAudio().open(format=paInt16, channels=1, rate=24000, output=True)
+
+        # with openai.audio.speech.with_streaming_response.create(
+        #     model="tts-1",
+        #     voice="alloy",
+        #     response_format="pcm",
+        #     input=response,
+        # ) as stream:
+        #     for chunk in stream.iter_bytes(chunk_size=1024):
+        #         player.write(chunk)
+        self.text_to_speech(response, voice_id='com.apple.speech.synthesis.voice.samantha')
 
     def _create_inference_chain(self, model):
         SYSTEM_PROMPT = """
@@ -259,17 +292,20 @@ class Assistant:
         )
 
 
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-latest")
+model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 
 # You can use OpenAI's GPT-4o model instead of Gemini Flash
 # by uncommenting the following line:
 # model = ChatOpenAI(model="gpt-4o")
-
+skb = ScreenKeyboardMouse()
 assistant = Assistant(model)
 def audio_callback(recognizer, audio):
+    # 为啥一定要encode呢。。
+    _, buffer = imencode(".png", skb.get_screenshot())
+    encodebuffer =  base64.b64encode(buffer)
     try:
-        prompt = recognizer.recognize_whisper(audio, model="base", language="english")
-        assistant.answer(prompt, get_screenshot())
+        prompt = recognizer.recognize_whisper(audio, model="base", language="chinese")
+        assistant.answer(prompt, encodebuffer)
 
     except UnknownValueError:
         print("There was an error processing the audio.")
@@ -283,7 +319,7 @@ with microphone as source:
 stop_listening = recognizer.listen_in_background(microphone, audio_callback)
 
 while True:
-    cv2.imshow("screenshot", get_screenshot())
+    cv2.imshow("screenshot", skb.get_screenshot())
     if cv2.waitKey(1) in [27, ord("q")]:
         break
 
