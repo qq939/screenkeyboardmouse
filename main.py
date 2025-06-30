@@ -13,6 +13,9 @@ import mss
 from PIL import Image
 import numpy as np
 import pyautogui
+import base64
+from threading import Lock, Thread
+
 
 
 """初始化屏幕捕获"""
